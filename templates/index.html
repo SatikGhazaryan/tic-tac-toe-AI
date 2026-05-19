@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0d1117;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: #161b27;
+            border: 2px solid #00e5ff44;
+            border-radius: 20px;
+            padding: 40px 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            max-width: 420px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 2rem;
+            color: #00e5ff;
+            text-align: center;
+            font-weight: bold;
+            text-shadow: 0 0 10px #00e5ff;
+        }
+        .mode-buttons { display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center; }
+        .mode-btn {
+            padding: 12px 30px;
+            border: 2px solid #1565c0;
+            background: #1976d2;
+            color: #fff;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: bold;
+            min-width: 220px;
+            transition: all 0.2s;
+        }
+        .mode-btn.active { background: #0d47a1; border-color: #00e5ff; }
+        .mode-btn:hover { background: #0d47a1; }
+        .scoreboard { font-size: 1rem; color: #00e5ff; font-weight: bold; letter-spacing: 2px; }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 6px;
+            background: #0d1117;
+            border-radius: 14px;
+            padding: 6px;
+        }
+        .cell {
+            width: 100px; height: 100px;
+            background: #2a2f45;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.8rem; font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+        .cell:hover:not(.taken) { background: #353b55; }
+        .cell.taken { cursor: default; }
+        .cell.x { color: #00e5ff; }
+        .cell.o { color: #7c4dff; }
+        #status { font-size: 1rem; color: #00e5ff; font-weight: bold; min-height: 24px; text-align: center; }
+        .action-buttons { display: flex; gap: 14px; }
+        .btn {
+            padding: 14px 24px; border: none; border-radius: 12px;
+            cursor: pointer; font-size: 0.85rem; font-weight: bold;
+            min-width: 140px; transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-reset { background: #1976d2; color: white; }
+        .btn-scores { background: #7c4dff; color: white; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Tic-Tac-Toe</h1>
+    <div class="mode-buttons">
+        <button class="mode-btn active" id="btn-pvp" onclick="setMode('player-vs-player')">PLAYER VS PLAYER</button>
+        <button class="mode-btn" id="btn-pva" onclick="setMode('player-vs-ai')">PLAYER VS AI</button>
+    </div>
+    <div class="scoreboard" id="scoreboard">X: 0 &nbsp; O: 0 &nbsp; Draws: 0</div>
+    <div class="board" id="board"></div>
+    <div id="status">Loading...</div>
+    <div class="action-buttons">
+        <button class="btn btn-reset" onclick="resetGame()">RESTART GAME</button>
+        <button class="btn btn-scores" onclick="resetScores()">RESET SCORES</button>
+    </div>
+</div>
+
+<script>
+    var gameState = null;
+
+    function buildBoard(board, isGameOver) {
+        var boardEl = document.getElementById('board');
+        boardEl.innerHTML = '';
+        for (var r = 0; r < 3; r++) {
+            for (var c = 0; c < 3; c++) {
+                var cell = document.createElement('div');
+                cell.className = 'cell';
+                var val = board[r][c];
+                if (val) {
+                    cell.textContent = val;
+                    cell.classList.add('taken', val.toLowerCase());
+                } else if (!isGameOver) {
+                    (function(row, col) {
+                        cell.addEventListener('click', function() {
+                            makeMove(row, col);
+                        });
+                    })(r, c);
+                }
+                boardEl.appendChild(cell);
+            }
+        }
+    }
+
+    function updateUI(state) {
+        gameState = state;
+        buildBoard(state.board, state.game_over);
+        document.getElementById('scoreboard').innerHTML =
+            'X: ' + state.scores.X + ' &nbsp; O: ' + state.scores.O + ' &nbsp; Draws: ' + state.scores.draw;
+        var statusEl = document.getElementById('status');
+        if (state.game_over) {
+            statusEl.textContent = state.winner === 'draw' ? "It's a draw!" : 'Player ' + state.winner + ' wins!';
+        } else {
+            var who = (state.mode === 'player-vs-ai' && state.current_player === 'O') ? 'AI (O)' : 'Player ' + state.current_player;
+            statusEl.textContent = who + "'s turn";
+        }
+        document.getElementById('btn-pvp').classList.toggle('active', state.mode === 'player-vs-player');
+        document.getElementById('btn-pva').classList.toggle('active', state.mode === 'player-vs-ai');
+    }
+
+    function makeMove(row, col) {
+        if (!gameState || gameState.game_over) return;
+        fetch('/make_move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row: row, col: col, player: gameState.current_player })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) { if (data.success) updateUI(data.game_state); })
+        .catch(function(e) { console.error('makeMove error:', e); });
+    }
+
+    function resetGame() {
+        fetch('/reset_game', { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) { if (data.success) updateUI(data.game_state); });
+    }
+
+    function resetScores() {
+        fetch('/reset_scores', { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) { if (data.success) updateUI(data.game_state); });
+    }
+
+    function setMode(mode) {
+        fetch('/set_mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: mode })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) { if (data.success) updateUI(data.game_state); });
+    }
+
+    fetch('/game_state')
+        .then(function(r) { return r.json(); })
+        .then(function(state) { updateUI(state); })
+        .catch(function(e) { document.getElementById('status').textContent = 'Error loading game'; });
+</script>
+</body>
+</html>
